@@ -1,6 +1,6 @@
 <?php
 /**
- * Phergie 
+ * Phergie
  *
  * PHP version 5
  *
@@ -11,7 +11,7 @@
  * It is also available through the world-wide-web at this URL:
  * http://phergie.org/license
  *
- * @category  Phergie 
+ * @category  Phergie
  * @package   Phergie_Plugin_Twitter
  * @author    Phergie Development Team <team@phergie.org>
  * @copyright 2008-2010 Phergie Development Team (http://phergie.org)
@@ -20,7 +20,7 @@
  */
 
 /**
- * These requires are for library code, so they don't fit Autoload's normal 
+ * These requires are for library code, so they don't fit Autoload's normal
  * conventions.
  *
  * @link http://github.com/scoates/simpletweet
@@ -32,8 +32,6 @@ require dirname(__FILE__) . '/Twitter/laconica.class.php';
  * Twitter plugin; Allows tweet (if configured) and twitter commands
  *
  * Usage:
- *   tweet text to tweet
- *    (sends a message to twitter and Phergie will give you the link)
  *   twitter username
  *    (fetches and displays the last tweet by @username)
  *   twitter username 3
@@ -48,7 +46,8 @@ require dirname(__FILE__) . '/Twitter/laconica.class.php';
  * @author   Phergie Development Team <team@phergie.org>
  * @license  http://phergie.org/license New BSD License
  * @link     http://pear.phergie.org/package/Phergie_Plugin_Twitter
- * @uses     Phergie_Plugin_Helper_Time pear.phergie.org
+ * @uses     Phergie_Plugin_Time pear.phergie.org
+ * @uses     Phergie_Plugin_Encoding pear.phergie.org
  */
 class Phergie_Plugin_Twitter extends Phergie_Plugin_Abstract
 {
@@ -68,19 +67,15 @@ class Phergie_Plugin_Twitter extends Phergie_Plugin_Abstract
     protected $twitterpassword = null;
 
     /**
-     * Allow only admins to tweet
-     */
-    protected $requireAdmin = true;
-
-    /**
      * Register with the URL plugin, if possible
      *
      * @return void
      */
     public function onConnect()
     {
-        if ($url = $this->getPluginHandler()->getPlugin('Url')) {
-            $url->registerRenderer($this);
+        $plugins = $this->getPluginHandler();
+        if ($plugins->hasPlugin('Url')) {
+            $plugins->getPlugin('Url')->registerRenderer($this);
         }
     }
 
@@ -91,13 +86,6 @@ class Phergie_Plugin_Twitter extends Phergie_Plugin_Abstract
      */
     public function onLoad()
     {
-        // see if tweetrequireadmin defined in config
-        if (isset($this->config['twitter.tweetrequireadmin'])
-            && $req = $this->config['twitter.tweetrequireadmin']
-        ) {
-            // if so, override default
-            $this->requireAdmin = $req;
-        }
         if (!isset($this->config['twitter.class'])
             || !$twitterClass = $this->config['twitter.class']
         ) {
@@ -113,6 +101,10 @@ class Phergie_Plugin_Twitter extends Phergie_Plugin_Abstract
             $this->twitterpassword,
             $url
         );
+
+        $plugins = $this->getPluginHandler();
+        $plugins->getPlugin('Encoding');
+        $plugins->getPlugin('Time');
 
     }
 
@@ -142,51 +134,27 @@ class Phergie_Plugin_Twitter extends Phergie_Plugin_Abstract
     }
 
     /**
-     * Sends a tweet to Twitter as the configured user
-     *
-     * @param string $txt the text to tweet
-     *
-     * @return void
-     */
-    public function onCommandTweet($txt)
-    {
-        echo "Tweet!\n";
-        $nick = $this->getEvent()->getNick();
-        if (!$this->twitteruser) {
-            return;
-        }
-        if ($this->requireAdmin && !$this->fromAdmin(true)) {
-            return;
-        }
-        $source = $this->getEvent()->getSource();
-        if ($tweet = $this->twitter->sendTweet($txt)) {
-            $this->doPrivmsg(
-                $source, 'Tweeted: '
-                . $this->twitter->getUrlOutputStatus($tweet)
-            );
-        } else {
-            $this->doNotice($nick, 'Tweet failed');
-        }
-    }
-
-    /**
      * Formats a Tweet into a message suitable for output
      *
      * @param object $tweet      JSON-decoded tweet object from Twitter
-     * @param bool   $includeUrl whether or not to include the URL in the 
+     * @param bool   $includeUrl whether or not to include the URL in the
      *  formatted output
      *
      * @return string
      */
     protected function formatTweet(StdClass $tweet, $includeUrl = true)
     {
-        $ts = new Phergie_Plugin_Helper_Time($tweet->created_at);
-        $out =  '<@' . $tweet->user->screen_name .'> '. $tweet->text
-            . ' - ' . $ts->getCountDown() . ' ago';
+        $ts = $this->plugins->time->getCountDown($tweet->created_at);
+        $out =  '<@' . $tweet->user->screen_name .'> '
+            . preg_replace('/\s+/', ' ', $tweet->text)
+            . ' - ' . $ts . ' ago';
         if ($includeUrl) {
             $out .= ' (' . $this->twitter->getUrlOutputStatus($tweet) . ')';
         }
-        return $out;
+
+        $encode = $this->getPluginHandler()->getPlugin('Encoding');
+
+        return $encode->decodeEntities($out);
     }
 
     /**
@@ -218,6 +186,5 @@ class Phergie_Plugin_Twitter extends Phergie_Plugin_Abstract
 
         // if we get this far, we haven't satisfied the URL, so bail:
         return false;
-
     }
 }

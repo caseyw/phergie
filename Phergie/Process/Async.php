@@ -1,6 +1,6 @@
 <?php
 /**
- * Phergie 
+ * Phergie
  *
  * PHP version 5
  *
@@ -11,7 +11,7 @@
  * It is also available through the world-wide-web at this URL:
  * http://phergie.org/license
  *
- * @category  Phergie 
+ * @category  Phergie
  * @package   Phergie
  * @author    Phergie Development Team <team@phergie.org>
  * @copyright 2008-2010 Phergie Development Team (http://phergie.org)
@@ -20,11 +20,11 @@
  */
 
 /**
- * Connection data processor which polls to handle input in an 
+ * Connection data processor which polls to handle input in an
  * asynchronous manner. Will also cause the application tick at
  * the user-defined wait time.
  *
- * @category Phergie 
+ * @category Phergie
  * @package  Phergie
  * @author   Phergie Development Team <team@phergie.org>
  * @license  http://phergie.org/license New BSD License
@@ -37,24 +37,24 @@ class Phergie_Process_Async extends Phergie_Process_Abstract
      *
      * @var int
      */
-    protected $sec;
+    protected $sec = 0;
 
     /**
      * Length of time to poll for stream activity (microseconds)
      *
      * @var int
      */
-    protected $usec;
+    protected $usec = 200000;
 
     /**
-     * Records when the application last performed a tick
+     * Length of time to wait between ticks.
      *
      * @var int
      */
-    protected $lastTick = 0;
+    protected $wait = 0;
 
     /**
-     * Overrides the parent class to set the poll time. 
+     * Overrides the parent class to set the poll time.
      *
      * @param Phergie_Bot $bot     Main bot class
      * @param array       $options Processor arguments
@@ -70,15 +70,17 @@ class Phergie_Process_Async extends Phergie_Process_Abstract
         }
 
         foreach (array('sec', 'usec') as $var) {
-            if (isset($options[$var]) && !is_int($options[$var])) {
-                throw new Phergie_Process_Exception(
-                    'Processor option "' . $var . '" must be an integer'
-                );
+            if (isset($options[$var])) {
+                if (!is_int($options[$var])) {
+                     throw new Phergie_Process_Exception(
+                        'Processor option "' . $var . '" must be an integer'
+                     );
+                }
+                $this->$var = $options[$var];
             }
-            $this->$var = $options[$var];
         }
 
-        if (empty($this->sec) && empty($this->usec)) {
+        if (!isset($this->sec) && !isset($this->usec)) {
             throw new Phergie_Process_Exception(
                 'One of the processor options "sec" or "usec" must be specified'
             );
@@ -88,12 +90,12 @@ class Phergie_Process_Async extends Phergie_Process_Abstract
     }
 
     /**
-     * Waits for stream activity and performs event processing on 
+     * Waits for stream activity and performs event processing on
      * connections with data to read.
      *
      * @return void
      */
-    protected function handleEventsAsync()
+    public function handleEvents()
     {
         $hostmasks = $this->driver->getActiveReadSockets($this->sec, $this->usec);
         if (!$hostmasks) {
@@ -108,45 +110,11 @@ class Phergie_Process_Async extends Phergie_Process_Abstract
             if ($event = $this->driver->getEvent()) {
                 $this->ui->onEvent($event, $connection);
                 $this->plugins->setEvent($event);
-
-                if (!$this->plugins->preEvent()) {
-                    continue;
-                }
-
+                $this->plugins->preEvent();
                 $this->plugins->{'on' . ucfirst($event->getType())}();
             }
 
             $this->processEvents($connection);
         }
-    }
-
-    /**
-     * Perform application tick event on all plugins and connections.
-     *
-     * @return void
-     */
-    protected function doTick()
-    {
-        foreach ($this->connections as $connection) {
-            $this->plugins->setConnection($connection);
-            $this->plugins->onTick();
-            $this->processEvents($connection);
-        }
-    }
-
-    /**
-     * Obtains and processes incoming events, then sends resulting outgoing 
-     * events.
-     *
-     * @return void
-     */
-    public function handleEvents()
-    {
-        $time = time();
-        if ($this->lastTick == 0 || ($this->lastTick + $this->wait <= $time)) {
-            $this->doTick();
-            $this->lastTick = $time;
-        }
-        $this->handleEventsAsync();
     }
 }

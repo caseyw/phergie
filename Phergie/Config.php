@@ -58,13 +58,17 @@ class Phergie_Config implements ArrayAccess
      */
     public function read($file)
     {
-        if (!(strtoupper(substr(PHP_OS, 0, 3)) === 'WIN'
-            && file_exists($file))
-            && !is_executable($file)
-        ) {
+        if (!file_exists($file)) {
             throw new Phergie_Config_Exception(
-                'Path "' . $file . '" does not reference an executable file',
-                Phergie_Config_Exception::ERR_FILE_NOT_EXECUTABLE
+                'File "' . $file . '" does not exist',
+                Phergie_Config_Exception::ERR_FILE_NOT_FOUND
+            );
+        }
+
+        if (!is_readable($file)) {
+            throw new Phergie_Config_Exception(
+                'File "' . $file . '" cannot be read',
+                Phergie_Config_Exception::ERR_FILE_NOT_READABLE
             );
         }
 
@@ -77,6 +81,22 @@ class Phergie_Config implements ArrayAccess
         }
 
         $this->files[$file] = array_keys($settings);
+        $this->settings += $settings;
+
+        return $this;
+    }
+
+    /**
+     * Merges an associative array of configuration setting values into the
+     * current configuration settings.
+     *
+     * @param array $settings Associative array of configuration setting
+     *        values keyed by setting name
+     *
+     * @return Phergie_Config Provides a fluent interface
+     */
+    public function readArray(array $settings)
+    {
         $this->settings += $settings;
 
         return $this;
@@ -96,9 +116,10 @@ class Phergie_Config implements ArrayAccess
                 $values[$setting] = $this->settings[$setting];
             }
             $source = '<?php' . PHP_EOL . PHP_EOL .
-                'return ' . var_export($value, true) . ';';
+                'return ' . var_export($values, true) . ';';
             file_put_contents($file, $source);
         }
+        return $this;
     }
 
     /**
